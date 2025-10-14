@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bell Sound Detector</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #000;
+            overflow: hidden;
+        }
+        .video-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 9999;
+            background: #000;
+        }
+        .video-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+    </style>
+</head>
+<body>
+    <div class="video-container">
+        <video id="defaultVideo" autoplay loop muted playsinline>
+            <source src="default1.mp4" type="video/mp4">
+        </video>
+        <video id="triggerVideo" style="display: none;" playsinline>
+            <source src="video1.mp4" type="video/mp4">
+        </video>
+    </div>
+
+    <script src="libs/tf.min.js"></script>
+    <script src="libs/speech-commands.min.js"></script>
+
+    <script>
+        let recognizer;
+        let classLabels = [];
+        let isListening = false;
+        let isVideoPlaying = false;
+        let microphoneStream = null;
+
+        const defaultVideo = document.getElementById('defaultVideo');
+        const triggerVideo = document.getElementById('triggerVideo');
+
+
+        function playTriggerVideo() {
+            if (isVideoPlaying) {
+                return;
+            }
+            isVideoPlaying = true;
+            defaultVideo.style.display = 'none';
+            defaultVideo.pause();
+            triggerVideo.style.display = 'block';
+            triggerVideo.currentTime = 0;
+            triggerVideo.muted = false;
+            triggerVideo.play().catch(err => {
+                returnToDefaultVideo();
+            });
+        }
+
+        function returnToDefaultVideo() {
+            isVideoPlaying = false;
+            triggerVideo.style.display = 'none';
+            triggerVideo.pause();
+            defaultVideo.style.display = 'block';
+            defaultVideo.play();
+        }
+
+        triggerVideo.addEventListener('ended', returnToDefaultVideo);
+
+        async function createModel() {
+            const URL = window.location.origin + '/';
+            const checkpointURL = URL + 'model.json';
+            const metadataURL = URL + 'metadata.json';
+
+            const recognizer = speechCommands.create(
+                'BROWSER_FFT',
+                undefined,
+                checkpointURL,
+                metadataURL
+            );
+
+            await recognizer.ensureModelLoaded();
+            return recognizer;
+        }
+
+        async function requestMicrophoneAccess(retryCount = 0) {
+            const maxRetries = 3;
+            try {
+                // Request microphone with specific constraints
+                microphoneStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                        sampleRate: 44100
+                    }
+                });
+
+                const tracks = microphoneStream.getAudioTracks();
+
+                return true;
+            } catch (error) {
+
+                if (retryCount < maxRetries) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    return requestMicrophoneAccess(retryCount + 1);
+                }
+
+                showMicrophoneError(error);
+                return false;
+            }
+        }
+
+        function showMicrophoneError(error) {
+            const errorMessages = {
+                'NotAllowedError': 'Microphone permission was denied.\n\nPlease allow microphone access in your system settings and restart the application.',
+                'NotFoundError': 'No microphone found.\n\nPlease connect a microphone and restart the application.',
+                'NotReadableError': 'Microphone is being used by another application.\n\nPlease close other applications using the microphone and restart.',
+                'OverconstrainedError': 'Microphone does not meet requirements.\n\nPlease check your microphone settings.',
+                'AbortError': 'Microphone access was aborted.\n\nPlease restart the application.',
+                'default': 'Failed to access microphone.\n\nError: ' + (error.message || 'Unknown error')
+            };
+
+            const message = errorMessages[error.name] || errorMessages['default'];
+
+            // Create custom error overlay
+            const overlay = document.createElement('div');
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                background: rgba(0, 0, 0, 0.95);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 99999;
+                font-family: Arial, sans-serif;
+            `;
+
+            overlay.innerHTML = `
+                <div style="
+                    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+                    padding: 40px 50px;
+                    border-radius: 15px;
+                    text-align: center;
+                    max-width: 500px;
+                    border: 2px solid #d4af37;
+                    box-shadow: 0 10px 40px rgba(212, 175, 55, 0.3);
+                ">
+                    <div style="
+                        font-size: 60px;
+                        margin-bottom: 20px;
+                    ">🎤</div>
+                    <h2 style="
+                        color: #d4af37;
+                        margin: 0 0 20px 0;
+                        font-size: 24px;
+                    ">Microphone Access Required</h2>
+                    <p style="
+                        color: #ffffff;
+                        margin: 0 0 30px 0;
+                        line-height: 1.6;
+                        white-space: pre-line;
+                        font-size: 16px;
+                    ">${message}</p>
+                    <button onclick="location.reload()" style="
+                        background: linear-gradient(135deg, #d4af37 0%, #f4d03f 100%);
+                        color: #000;
+                        border: none;
+                        padding: 15px 40px;
+                        font-size: 16px;
+                        font-weight: bold;
+                        border-radius: 8px;
+                        cursor: pointer;
+                        transition: transform 0.2s;
+                    " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                        Retry
+                    </button>
+                </div>
+            `;
+
+            document.body.appendChild(overlay);
+        }
+
+        async function init() {
+            try {
+                defaultVideo.play().catch(err => {
+                });
+
+                // Request microphone access with retry logic
+                const micAccessGranted = await requestMicrophoneAccess();
+                if (!micAccessGranted) {
+                    return;
+                }
+
+                recognizer = await createModel();
+                classLabels = recognizer.wordLabels();
+
+                setTimeout(() => {
+                    startListening();
+                }, 1000);
+            } catch (error) {
+                showMicrophoneError(new Error('Failed to load sound detection model'));
+            }
+        }
+
+        async function startListening() {
+            if (isListening || !recognizer) return;
+            isListening = true;
+
+            try {
+                let detectionCount = 0;
+
+                recognizer.listen(result => {
+                    detectionCount++;
+                    const scores = result.scores;
+
+                    // Build detection report
+                    let logLine = `🔊 [DETECTION #${detectionCount}] `;
+                    let hasHighConfidence = false;
+
+                    for (let i = 0; i < classLabels.length; i++) {
+                        const probability = scores[i];
+                        const percentage = (probability * 100).toFixed(2);
+
+                        // Log all classes with their percentages
+                        if (i > 0) logLine += ' | ';
+                        logLine += `${classLabels[i]}: ${percentage}%`;
+
+                        // Highlight high confidence detections
+                        if (probability >= 0.75) {
+                            hasHighConfidence = true;
+                        }
+
+                        // Detect Class 2 (index 1) at 90% or higher
+                        if (i === 1 && probability >= 0.90) {
+                            playTriggerVideo();
+                        }
+                    }
+                }, {
+                    includeSpectrogram: true,
+                    probabilityThreshold: 0.75,
+                    invokeCallbackOnNoiseAndUnknown: true,
+                    overlapFactor: 0.50
+                });
+
+
+                // Monitor microphone stream health
+                monitorMicrophoneHealth();
+            } catch (error) {
+                isListening = false;
+                showMicrophoneError(new Error('Failed to start sound detection'));
+            }
+        }
+
+        function monitorMicrophoneHealth() {
+            // Check microphone stream every 5 seconds
+            setInterval(() => {
+                if (microphoneStream) {
+                    const tracks = microphoneStream.getAudioTracks();
+                    if (tracks.length === 0 || !tracks[0].enabled || tracks[0].readyState !== 'live') {
+                        showMicrophoneError(new Error('Microphone connection lost'));
+                    }
+                }
+            }, 5000);
+        }
+
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
