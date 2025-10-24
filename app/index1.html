@@ -33,10 +33,8 @@
 <body>
     <div class="video-container">
         <video id="defaultVideo" autoplay loop muted playsinline>
-            <source src="default1.mp4" type="video/mp4">
         </video>
         <video id="triggerVideo" style="display: none;" playsinline>
-            <source src="video1.mp4" type="video/mp4">
         </video>
     </div>
 
@@ -197,6 +195,18 @@
         }
 
         async function init() {
+            const defaultVideoPath = await window.electron.getVideoPath({ screen: 2, type: 'default' });
+            console.log('defaultVideoPath:', defaultVideoPath);
+            if (defaultVideoPath) {
+                defaultVideo.src = 'local-video://' + defaultVideoPath;
+            }
+
+            const triggerVideoPath = await window.electron.getVideoPath({ screen: 2, type: 'trigger' });
+            console.log('triggerVideoPath:', triggerVideoPath);
+            if (triggerVideoPath) {
+                triggerVideo.src = 'local-video://' + triggerVideoPath;
+            }
+
             try {
                 defaultVideo.play().catch(err => {
                 });

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, session, screen } = require('electron');
+const { app, BrowserWindow, session, screen, ipcMain, protocol, dialog } = require('electron');
 const path = require('path');
 const express = require('express');
 const getPort = require('get-port');
@@ -69,6 +69,7 @@ function createWindows(port) {
     height: height1,
     fullscreen: true,
     webPreferences: {
+      preload: path.join(__dirname, 'app', 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
       // Enable media access
@@ -87,6 +88,7 @@ function createWindows(port) {
     height: height2,
     fullscreen: true,
     webPreferences: {
+      preload: path.join(__dirname, 'app', 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
       // Enable media access
@@ -113,15 +115,38 @@ function createWindows(port) {
   });
 
   // Grant media permissions by default
-  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
-    if (permission === 'media' || permission === 'microphone' || permission === 'audioCapture') {
-      return true;
-    }
-    return false;
-  });
-}
+    session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+      if (permission === 'media' || permission === 'microphone' || permission === 'audioCapture') {
+        return true;
+      }
+      return false;
+    });
+  }
+  
+  ipcMain.handle('get-video-path', (event, { screen, type }) => {
+    const isDev = process.env.NODE_ENV !== 'production';
+    console.log('isDev:', isDev);
+    console.log('app.getPath(exe):', app.getPath('exe'));
+    const basePath = 'C:\\';
+    console.log('basePath:', basePath);
 
-// Ensure the server is shut down when the app quits
+    let videoPath;
+    if (screen === 1) {
+      if (type === 'default') {
+        videoPath = path.join(basePath, 'default1', 'video.mp4');
+      } else { // trigger
+        videoPath = path.join(basePath, 'trigger1', 'video.mp4');
+      }
+    } else { // screen 2
+      if (type === 'default') {
+        videoPath = path.join(basePath, 'default2', 'video.mp4');
+      } else { // trigger
+        videoPath = path.join(basePath, 'trigger2', 'video.mp4');
+      }
+    }
+    console.log('videoPath:', videoPath);
+    return videoPath;
+  });  // Ensure the server is shut down when the app quits
 app.on('will-quit', () => {
   if (serverInstance) {
     serverInstance.close();
@@ -141,4 +166,12 @@ app.on('activate', () => {
 });
 
 // Start the server and create the window when Electron is ready
-app.whenReady().then(initialize);
+app.whenReady().then(() => {
+  // Register a custom protocol to serve local video files
+  protocol.registerFileProtocol('local-video', (request, callback) => {
+    const url = request.url.substr('local-video://'.length);
+    callback({ path: path.normalize(decodeURI(url)) });
+  });
+
+  initialize();
+});

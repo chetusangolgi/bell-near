@@ -33,10 +33,8 @@
 <body>
     <div class="video-container">
         <video id="defaultVideo" autoplay loop muted playsinline>
-            <source src="default.mp4" type="video/mp4">
         </video>
         <video id="triggerVideo" style="display: none;" playsinline>
-            <source src="video.mp4" type="video/mp4">
         </video>
     </div>
 
@@ -197,6 +195,18 @@
         }
 
         async function init() {
+            const defaultVideoPath = await window.electron.getVideoPath({ screen: 1, type: 'default' });
+            console.log('defaultVideoPath:', defaultVideoPath);
+            if (defaultVideoPath) {
+                defaultVideo.src = 'local-video://' + defaultVideoPath;
+            }
+
+            const triggerVideoPath = await window.electron.getVideoPath({ screen: 1, type: 'trigger' });
+            console.log('triggerVideoPath:', triggerVideoPath);
+            if (triggerVideoPath) {
+                triggerVideo.src = 'local-video://' + triggerVideoPath;
+            }
+
             try {
                 defaultVideo.play().catch(err => {
                 });
@@ -246,8 +256,8 @@
                             hasHighConfidence = true;
                         }
 
-                        // Detect Class 2 (index 1) at 90% or higher
-                        if (i === 1 && probability >= 0.90) {
+                        // Detect Class 2 (index 1) at 75% or higher
+                        if (i === 1 && probability >= 0.75) {
                             playTriggerVideo();
                         }
                     }
