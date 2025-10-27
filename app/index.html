@@ -195,13 +195,17 @@
         }
 
         async function init() {
-            const defaultVideoPath = await window.electron.getVideoPath({ screen: 1, type: 'default' });
+            // Get the display name for this window
+            const displayName = await window.electron.getDisplayName();
+            console.log('Running on display:', displayName);
+
+            const defaultVideoPath = await window.electron.getVideoPath({ displayName, type: 'default' });
             console.log('defaultVideoPath:', defaultVideoPath);
             if (defaultVideoPath) {
                 defaultVideo.src = 'local-video://' + defaultVideoPath;
             }
 
-            const triggerVideoPath = await window.electron.getVideoPath({ screen: 1, type: 'trigger' });
+            const triggerVideoPath = await window.electron.getVideoPath({ displayName, type: 'trigger' });
             console.log('triggerVideoPath:', triggerVideoPath);
             if (triggerVideoPath) {
                 triggerVideo.src = 'local-video://' + triggerVideoPath;
