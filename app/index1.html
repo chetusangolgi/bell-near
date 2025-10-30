@@ -51,72 +51,6 @@
         const defaultVideo = document.getElementById('defaultVideo');
         const triggerVideo = document.getElementById('triggerVideo');
 
-        async function setAudioOutputDevice(videoElement, deviceName) {
-            try {
-                // Get all available audio output devices
-                const devices = await navigator.mediaDevices.enumerateDevices();
-                const audioOutputs = devices.filter(device => device.kind === 'audiooutput');
-
-                console.log('Available audio output devices:', audioOutputs.map(d => d.label));
-
-                if (!deviceName) {
-                    console.log('No specific audio device requested, using default');
-                    return;
-                }
-
-                // Check if this is auto-detection mode
-                let searchName = deviceName;
-                if (deviceName.startsWith('AUTO:')) {
-                    searchName = deviceName.substring(5); // Remove 'AUTO:' prefix
-                    console.log(`Auto-detecting audio device for display: ${searchName}`);
-                }
-
-                // Find matching audio device (case-insensitive partial match)
-                // Try exact match first, then partial match
-                let matchingDevice = audioOutputs.find(device =>
-                    device.label.toLowerCase() === searchName.toLowerCase()
-                );
-
-                if (!matchingDevice) {
-                    // Try partial match (display name might be part of audio device name)
-                    matchingDevice = audioOutputs.find(device =>
-                        device.label.toLowerCase().includes(searchName.toLowerCase()) ||
-                        searchName.toLowerCase().includes(device.label.toLowerCase())
-                    );
-                }
-
-                if (!matchingDevice) {
-                    // Try matching by HDMI/DisplayPort audio (common pattern)
-                    matchingDevice = audioOutputs.find(device => {
-                        const label = device.label.toLowerCase();
-                        // Look for display audio indicators
-                        return (label.includes('display') ||
-                                label.includes('hdmi') ||
-                                label.includes('displayport') ||
-                                label.includes('nvidia') ||
-                                label.includes('amd')) &&
-                               (label.includes(searchName.toLowerCase()) ||
-                                searchName.toLowerCase().includes(label.split(' ')[0]));
-                    });
-                }
-
-                if (matchingDevice && videoElement.setSinkId) {
-                    await videoElement.setSinkId(matchingDevice.deviceId);
-                    console.log(`✓ Audio output set to: ${matchingDevice.label} (${matchingDevice.deviceId})`);
-                    return true;
-                } else if (!videoElement.setSinkId) {
-                    console.warn('setSinkId is not supported in this browser');
-                    return false;
-                } else {
-                    console.warn(`Audio device for "${searchName}" not found. Using default output.`);
-                    console.log('Available devices:', audioOutputs.map(d => `"${d.label}"`).join(', '));
-                    return false;
-                }
-            } catch (err) {
-                console.error('Error setting audio output device:', err);
-                return false;
-            }
-        }
 
         function playTriggerVideo() {
             if (isVideoPlaying) {
@@ -265,10 +199,6 @@
             const displayName = await window.electron.getDisplayName();
             console.log('Running on display:', displayName);
 
-            // Get the preferred audio device for this display
-            const audioDeviceName = await window.electron.getAudioDevice();
-            console.log('Preferred audio device:', audioDeviceName);
-
             const defaultVideoPath = await window.electron.getVideoPath({ displayName, type: 'default' });
             console.log('defaultVideoPath:', defaultVideoPath);
             if (defaultVideoPath) {
@@ -282,10 +212,6 @@
             }
 
             try {
-                // Set audio output device for both videos before playing
-                await setAudioOutputDevice(defaultVideo, audioDeviceName);
-                await setAudioOutputDevice(triggerVideo, audioDeviceName);
-
                 defaultVideo.play().catch(err => {
                 });
 

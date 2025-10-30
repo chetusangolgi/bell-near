@@ -30,20 +30,6 @@ const DISPLAY_VIDEO_CONFIG = {
   // 'x1920_y-425': 'your_folder_name_here',   // Portrait
 };
 
-// Configuration: Map display identifiers to audio device names
-// Leave empty to auto-detect or specify exact audio device names
-const DISPLAY_AUDIO_CONFIG = {
-  // Option 1: Use Display ID (Most Stable - Recommended)
-  // '1133551107': 'UT222Q',              // Match audio device name from Windows
-  // '2528732444': 'Acer UT220HQL',       // Match audio device name from Windows
-
-  // Option 2: Use resolution
-  // '1920x1080': 'UT222Q',
-  // '1080x1920': 'Acer UT220HQL',
-
-  // If left empty, the system will try to match display audio automatically
-};
-
 /**
  * Creates and starts a local Express server to host the application files.
  * This mimics the behavior of `python -m http.server` and is required
@@ -240,40 +226,6 @@ function createWindows(port) {
 
     console.log(`Video path for display ID:${identifiers.id} (${type}): ${videoPath}`);
     return videoPath;
-  });
-
-  // Add IPC handler to get preferred audio device for a window
-  ipcMain.handle('get-audio-device', (event) => {
-    const webContentsId = event.sender.id;
-    const displayIdentifiers = displayWindowMap.get(webContentsId);
-
-    if (!displayIdentifiers) {
-      console.log(`No display identifiers found for window ${webContentsId}`);
-      return null;
-    }
-
-    // First check if there's a manual configuration
-    let audioDeviceName = null;
-
-    if (DISPLAY_AUDIO_CONFIG[displayIdentifiers.id]) {
-      audioDeviceName = DISPLAY_AUDIO_CONFIG[displayIdentifiers.id];
-      console.log(`Matched audio device by ID: ${displayIdentifiers.id} -> ${audioDeviceName}`);
-    } else if (DISPLAY_AUDIO_CONFIG[displayIdentifiers.resolution]) {
-      audioDeviceName = DISPLAY_AUDIO_CONFIG[displayIdentifiers.resolution];
-      console.log(`Matched audio device by resolution: ${displayIdentifiers.resolution} -> ${audioDeviceName}`);
-    } else if (DISPLAY_AUDIO_CONFIG[displayIdentifiers.position]) {
-      audioDeviceName = DISPLAY_AUDIO_CONFIG[displayIdentifiers.position];
-      console.log(`Matched audio device by position: ${displayIdentifiers.position} -> ${audioDeviceName}`);
-    } else if (DISPLAY_AUDIO_CONFIG[displayIdentifiers.label]) {
-      audioDeviceName = DISPLAY_AUDIO_CONFIG[displayIdentifiers.label];
-      console.log(`Matched audio device by label: ${displayIdentifiers.label} -> ${audioDeviceName}`);
-    } else {
-      // AUTO-DETECT: Return display identifiers for dynamic matching in renderer
-      console.log(`Auto-detecting audio device for display: ${displayIdentifiers.label}`);
-      audioDeviceName = 'AUTO:' + displayIdentifiers.label;
-    }
-
-    return audioDeviceName;
   });  // Ensure the server is shut down when the app quits
 app.on('will-quit', () => {
   if (serverInstance) {
