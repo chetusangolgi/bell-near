@@ -203,8 +203,9 @@ function createWindows(port) {
     return displayIdentifiers;
   });
 
-  ipcMain.handle('get-video-path', (event, { displayName, type }) => {
+  ipcMain.handle('get-video-path', (event, { displayName, type, videoNumber }) => {
     const basePath = 'C:\\';
+    const fs = require('fs');
 
     // displayName is actually the full identifiers object
     const identifiers = displayName;
@@ -235,10 +236,22 @@ function createWindows(port) {
     if (type === 'default') {
       videoPath = path.join(basePath, `${folderName}_default`, 'video.mp4');
     } else { // trigger
-      videoPath = path.join(basePath, `${folderName}_trigger`, 'video.mp4');
+      if (videoNumber) {
+        // For numbered trigger videos: video1.mp4, video2.mp4, etc.
+        videoPath = path.join(basePath, `${folderName}_trigger`, `video${videoNumber}.mp4`);
+
+        // Check if file exists before returning
+        if (!fs.existsSync(videoPath)) {
+          console.log(`Video path for display ID:${identifiers.id} (${type}, video${videoNumber}): NOT FOUND`);
+          return null; // Return null if file doesn't exist
+        }
+      } else {
+        // Fallback to old behavior if no videoNumber specified
+        videoPath = path.join(basePath, `${folderName}_trigger`, 'video.mp4');
+      }
     }
 
-    console.log(`Video path for display ID:${identifiers.id} (${type}): ${videoPath}`);
+    console.log(`Video path for display ID:${identifiers.id} (${type}${videoNumber ? ', video'+videoNumber : ''}): ${videoPath}`);
     return videoPath;
   });
 

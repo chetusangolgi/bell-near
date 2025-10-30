@@ -47,22 +47,48 @@
         let isListening = false;
         let isVideoPlaying = false;
         let microphoneStream = null;
+        let consecutiveDetections = 0;
+        const REQUIRED_CONSECUTIVE_DETECTIONS = 2; // Must detect in 2 consecutive samples
+        const DETECTION_THRESHOLD = 0.80; // 80% confidence required
+
+        let currentVideoIndex = 1; // Start with video1
+        const MAX_VIDEO_INDEX = 9; // Check up to video9
+        let triggerVideoPaths = {}; // Store paths for trigger videos
 
         const defaultVideo = document.getElementById('defaultVideo');
         const triggerVideo = document.getElementById('triggerVideo');
 
 
-        function playTriggerVideo() {
+        async function playTriggerVideo() {
             if (isVideoPlaying) {
                 return;
             }
+
+            // Get the path for the current video index
+            const videoPath = triggerVideoPaths[currentVideoIndex];
+
+            if (!videoPath) {
+                currentVideoIndex = 1;
+                const fallbackPath = triggerVideoPaths[currentVideoIndex];
+                if (!fallbackPath) {
+                    return;
+                }
+                triggerVideo.src = 'local-video://' + fallbackPath;
+            } else {
+                triggerVideo.src = 'local-video://' + videoPath;
+            }
+
             isVideoPlaying = true;
             defaultVideo.style.display = 'none';
             defaultVideo.pause();
             triggerVideo.style.display = 'block';
             triggerVideo.currentTime = 0;
             triggerVideo.muted = false;
-            triggerVideo.play().catch(err => {
+
+            triggerVideo.play().then(() => {
+                // Increment for next trigger
+                currentVideoIndex++;
+            }).catch(err => {
                 returnToDefaultVideo();
             });
         }
@@ -83,10 +109,7 @@
                 const devices = await navigator.mediaDevices.enumerateDevices();
                 const audioOutputs = devices.filter(device => device.kind === 'audiooutput');
 
-                console.log('Available audio output devices:', audioOutputs.map(d => d.label));
-
                 if (!deviceName) {
-                    console.log('No specific audio device requested, using default');
                     return;
                 }
 
@@ -94,7 +117,6 @@
                 let searchName = deviceName;
                 if (deviceName.startsWith('AUTO:')) {
                     searchName = deviceName.substring(5); // Remove 'AUTO:' prefix
-                    console.log(`Auto-detecting audio device for display: ${searchName}`);
                 }
 
                 // Find matching audio device (case-insensitive partial match)
@@ -128,18 +150,13 @@
 
                 if (matchingDevice && videoElement.setSinkId) {
                     await videoElement.setSinkId(matchingDevice.deviceId);
-                    console.log(`✓ Audio output set to: ${matchingDevice.label} (${matchingDevice.deviceId})`);
                     return true;
                 } else if (!videoElement.setSinkId) {
-                    console.warn('setSinkId is not supported in this browser');
                     return false;
                 } else {
-                    console.warn(`Audio device for "${searchName}" not found. Using default output.`);
-                    console.log('Available devices:', audioOutputs.map(d => `"${d.label}"`).join(', '));
                     return false;
                 }
             } catch (err) {
-                console.error('Error setting audio output device:', err);
                 return false;
             }
         }
@@ -264,22 +281,21 @@
         async function init() {
             // Get the display name for this window
             const displayName = await window.electron.getDisplayName();
-            console.log('Running on display:', displayName);
 
             // Get the preferred audio device for this display
             const audioDeviceName = await window.electron.getAudioDevice();
-            console.log('Preferred audio device:', audioDeviceName);
 
             const defaultVideoPath = await window.electron.getVideoPath({ displayName, type: 'default' });
-            console.log('defaultVideoPath:', defaultVideoPath);
             if (defaultVideoPath) {
                 defaultVideo.src = 'local-video://' + defaultVideoPath;
             }
 
-            const triggerVideoPath = await window.electron.getVideoPath({ displayName, type: 'trigger' });
-            console.log('triggerVideoPath:', triggerVideoPath);
-            if (triggerVideoPath) {
-                triggerVideo.src = 'local-video://' + triggerVideoPath;
+            // Load all available trigger videos (video1.mp4 to video9.mp4)
+            for (let i = 1; i <= MAX_VIDEO_INDEX; i++) {
+                const videoPath = await window.electron.getVideoPath({ displayName, type: 'trigger', videoNumber: i });
+                if (videoPath) {
+                    triggerVideoPaths[i] = videoPath;
+                }
             }
 
             // Set audio output device for both videos before playing
@@ -287,8 +303,7 @@
             await setAudioOutputDevice(triggerVideo, audioDeviceName);
 
             try {
-                defaultVideo.play().catch(err => {
-                });
+                await defaultVideo.play().catch(err => {});
 
                 // Request microphone access with retry logic
                 const micAccessGranted = await requestMicrophoneAccess();
@@ -301,7 +316,7 @@
 
                 setTimeout(() => {
                     startListening();
-                }, 1000);
+                }, 2000);
             } catch (error) {
                 showMicrophoneError(new Error('Failed to load sound detection model'));
             }
@@ -315,35 +330,35 @@
                 let detectionCount = 0;
 
                 recognizer.listen(result => {
-                    detectionCount++;
                     const scores = result.scores;
-
-                    // Build detection report
-                    let logLine = `🔊 [DETECTION #${detectionCount}] `;
-                    let hasHighConfidence = false;
+                    let detectedInThisSample = false;
 
                     for (let i = 0; i < classLabels.length; i++) {
                         const probability = scores[i];
-                        const percentage = (probability * 100).toFixed(2);
 
-                        // Log all classes with their percentages
-                        if (i > 0) logLine += ' | ';
-                        logLine += `${classLabels[i]}: ${percentage}%`;
-
-                        // Highlight high confidence detections
-                        if (probability >= 0.75) {
-                            hasHighConfidence = true;
+                        // Check if Class 2 (index 1) meets threshold
+                        if (i === 1 && probability >= DETECTION_THRESHOLD) {
+                            detectedInThisSample = true;
                         }
+                    }
 
-                        // Detect Class 2 (index 1) at 90% or higher
-                        if (i === 1 && probability >= 0.90) {
+                    // Consecutive detection logic
+                    if (detectedInThisSample) {
+                        consecutiveDetections++;
+
+                        // Only trigger if we have enough consecutive detections
+                        if (consecutiveDetections >= REQUIRED_CONSECUTIVE_DETECTIONS) {
                             playTriggerVideo();
+                            consecutiveDetections = 0; // Reset after triggering
                         }
+                    } else {
+                        // Reset counter if detection is lost
+                        consecutiveDetections = 0;
                     }
                 }, {
                     includeSpectrogram: true,
-                    probabilityThreshold: 0.75,
-                    invokeCallbackOnNoiseAndUnknown: true,
+                    probabilityThreshold: 0.75,  // Lower threshold for callback, but we check higher in code
+                    invokeCallbackOnNoiseAndUnknown: false,
                     overlapFactor: 0.50
                 });
 
