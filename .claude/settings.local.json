@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/PC/Downloads/video2/app/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
